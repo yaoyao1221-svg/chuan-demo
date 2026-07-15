@@ -78,7 +78,7 @@ const App = {
       mo.innerHTML='<div class="modal-box"><div class="modal-header"><h3 id="modalTitle"></h3><span class="modal-close" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'show\')">&times;</span></div><div class="modal-body" id="modalBody"></div><div class="modal-footer" id="modalFooter"></div></div>';
       document.body.appendChild(mo);
       document.getElementById('modalOverlay').addEventListener('click',function(e){if(e.target.id==='modalOverlay')document.getElementById('modalOverlay').classList.remove('show');});
-      var ct=document.createElement('div');ct.className='chat-toggle';ct.id='chatToggle';ct.innerHTML='&#x1F477;<span class="ct-dot"></span>';document.body.appendChild(ct);
+      var ct=document.createElement('div');ct.className='chat-toggle';ct.id='chatToggle';ct.innerHTML='👷<span class="ct-dot"></span>';document.body.appendChild(ct);
       var cp=document.createElement('div');cp.className='chat-panel';cp.id='chatPanel';document.body.appendChild(cp);
       var self=this;
       document.getElementById('chatToggle').addEventListener('click',function(e){e.stopPropagation();var p=document.getElementById('chatPanel');p.classList.toggle('show');if(p.classList.contains('show'))self.renderChat();});
