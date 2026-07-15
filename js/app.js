@@ -87,9 +87,8 @@ const App = {
       this.handleRoute();
       window.addEventListener('hashchange', function() { self.handleRoute(); });
     } catch(e) {
-      var el=document.createElement('div'); el.style.cssText='position:fixed;top:0;left:0;right:0;padding:16px;background:#ff5e7a;color:#fff;z-index:9999;font-family:sans-serif;';
-      el.textContent='Error: '+(e.message||'Unknown');
-      document.body.prepend(el);
+      var el=document.getElementById('mainContent'); if(el){el.innerHTML='<div style="padding:40px;color:var(--red);font-size:16px;line-height:2;"><strong style="font-size:20px;">&#x26A0; JavaScript Error</strong><br><span style="font-family:monospace;background:rgba(255,94,122,0.1);padding:8px 12px;border-radius:6px;display:block;margin-top:8px;">'+(e.stack||e.message||e||'Unknown')+'</span></div>';}
+      else{var el2=document.createElement('div');el2.style.cssText='padding:40px;color:#ff5e7a;font-size:18px;';el2.textContent='Error: '+(e.message||'Unknown');document.body.prepend(el2);}
     }
   },
 
