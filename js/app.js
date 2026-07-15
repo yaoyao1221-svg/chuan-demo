@@ -53,6 +53,13 @@ const CHAT_QA = {
     { q: '知识图谱如何消除AI幻觉？能举个例子对比吗？', a: '举一个具体例子说明：<br><br><strong style="color:var(--red);">🚫 没有知识图谱时（AI可能出现的幻觉）：</strong><br>问："PVA 17-88粘度偏高怎么办？"<br>AI答："建议提高聚合温度，缩短反应时间。"<br>❌ 这可能是对的，也可能是错的——AI只是在"猜"<br><br><strong style="color:var(--green);">✅ 有知识图谱时（AI的推理过程）：</strong><br>Step 1：查询图谱 → PVA 17-88（产品）→ 聚合釜R-201（生产设备关联）<br>Step 2：查询图谱 → 聚合釜R-201（设备）→ 温度波动（影响因素关联）<br>Step 3：查询图谱 → PVA 17-88（产品）→ 20260608批次（批次关联）<br>Step 4：查询图谱 → 20260608批次（批次）→ 粘度超标（异常关联）<br>Step 5：AI汇总 → 粘度超标→追溯到聚合釜温度波动→温控阀故障→<strong>应该维修温控阀，而不是调整温度</strong><br><br><strong>知识图谱的价值：</strong><br>• AI的每一个推理步骤都有图谱中的实体和关系支撑<br>• AI不能超越图谱的范围"自由发挥"<br>• 输出的结论是可追溯、可验证、可解释的<br>• 业务专家可以沿着图谱路径复核AI的分析是否正确<br><br><strong>当前验证效果：</strong>AI要因分析准确率达到85%（业务专家认可度），较没有图谱时提升约30个百分点。' }
   ]
 };
+// ---- 千人千面 · 角色数据过滤 ----
+const ROLE_VIEWS = {
+  factory_leader: { tagline:'战略层 — 关注整体效益、风险、KPI完成度', accent:'var(--blue)', dashboard:{kpis:[{label:'AI智能体覆盖',value:'3',sub:'QC/配煤/检修',color:'blue',trend:'+3'},{label:'年度节约',value:'128万',sub:'配煤优化',color:'green',trend:'+12%'},{label:'风险覆盖率',value:'100%',sub:'高风险受控',color:'orange',trend:'0未闭环'},{label:'AI采纳率',value:'85%',sub:'专家认可',color:'purple',trend:'+8%'}]}},
+  dept_head: { tagline:'管理层 — 关注部门指标、异常跟踪、课题进度', accent:'var(--green)', dashboard:{kpis:[{label:'质量异常',value:'2',sub:'高优1/中优1',color:'red',trend:'-1'},{label:'QC完成率',value:'50%',sub:'1/2已完成',color:'cyan',trend:'+25%'},{label:'成本达标率',value:'92%',sub:'目标730实740',color:'orange',trend:'接近'},{label:'检修完成率',value:'66%',sub:'2/3按节点',color:'blue',trend:'1项延迟'}]}},
+  engineer: { tagline:'执行层 — 关注日常任务、分析工具、方案细节', accent:'var(--orange)', dashboard:{kpis:[{label:'待处理分析',value:'3',sub:'粘度/固含量/熔指',color:'red',trend:'优先'},{label:'今日待确认',value:'5',sub:'4项已确认',color:'cyan',trend:'80%'},{label:'方案待评估',value:'3',sub:'成本/稳定/环保',color:'green',trend:'新'},{label:'方案待编制',value:'1',sub:'K-101临修',color:'orange',trend:'7/20截止'}]}},
+  it_staff: { tagline:'支撑层 — 关注系统状态、数据接入、权限审计', accent:'var(--purple)', dashboard:{kpis:[{label:'数据接入',value:'3/3',sub:'全部在线',color:'green',trend:'正常'},{label:'图谱节点',value:'43',sub:'+6本月',color:'cyan',trend:'增长'},{label:'推理准确率',value:'92%',sub:'+3%',color:'blue',trend:'优化'},{label:'运行时长',value:'720h',sub:'30天无故障',color:'purple',trend:'稳定'}]}}
+};
 // ---- 应用状态 ----
 let AppState = {
   savedReports: 0, appliedSchemes: [], submittedPlans: [],
