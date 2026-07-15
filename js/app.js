@@ -53,3 +53,264 @@ const CHAT_QA = {
     { q: '知识图谱如何消除AI幻觉？能举个例子对比吗？', a: '举一个具体例子说明：<br><br><strong style="color:var(--red);">🚫 没有知识图谱时（AI可能出现的幻觉）：</strong><br>问："PVA 17-88粘度偏高怎么办？"<br>AI答："建议提高聚合温度，缩短反应时间。"<br>❌ 这可能是对的，也可能是错的——AI只是在"猜"<br><br><strong style="color:var(--green);">✅ 有知识图谱时（AI的推理过程）：</strong><br>Step 1：查询图谱 → PVA 17-88（产品）→ 聚合釜R-201（生产设备关联）<br>Step 2：查询图谱 → 聚合釜R-201（设备）→ 温度波动（影响因素关联）<br>Step 3：查询图谱 → PVA 17-88（产品）→ 20260608批次（批次关联）<br>Step 4：查询图谱 → 20260608批次（批次）→ 粘度超标（异常关联）<br>Step 5：AI汇总 → 粘度超标→追溯到聚合釜温度波动→温控阀故障→<strong>应该维修温控阀，而不是调整温度</strong><br><br><strong>知识图谱的价值：</strong><br>• AI的每一个推理步骤都有图谱中的实体和关系支撑<br>• AI不能超越图谱的范围"自由发挥"<br>• 输出的结论是可追溯、可验证、可解释的<br>• 业务专家可以沿着图谱路径复核AI的分析是否正确<br><br><strong>当前验证效果：</strong>AI要因分析准确率达到85%（业务专家认可度），较没有图谱时提升约30个百分点。' }
   ]
 };
+// ---- 应用状态 ----
+let AppState = {
+  savedReports: 0, appliedSchemes: [], submittedPlans: [],
+  chatHistory: { dashboard: [], qc: [], coal: [], maintenance: [], 'knowledge-graph': [] },
+  chatScenario: 'dashboard'
+};
+
+// ---- 主应用 ----
+const App = {
+  currentRole: 'factory_leader', currentRoute: 'dashboard', charts: {}, kgSimulation: null,
+
+  init() {
+    try {
+      const tc = document.createElement('div'); tc.className = 'toast-container'; tc.id = 'toastContainer'; document.body.appendChild(tc);
+      const mo = document.createElement('div'); mo.className = 'modal-overlay'; mo.id = 'modalOverlay';
+      mo.innerHTML = '<div class="modal-box"><div class="modal-header"><h3 id="modalTitle"></h3><span class="modal-close" onclick="document.getElementById(\'modalOverlay\').classList.remove(\'show\')">&times;</span></div><div class="modal-body" id="modalBody"></div><div class="modal-footer" id="modalFooter"></div></div>';
+      document.body.appendChild(mo);
+      document.getElementById('modalOverlay').addEventListener('click', function(e) { if(e.target.id==='modalOverlay') document.getElementById('modalOverlay').classList.remove('show'); });
+      const ct = document.createElement('div'); ct.className = 'chat-toggle'; ct.id = 'chatToggle'; ct.innerHTML = '&#x1F4AC;<span class="ct-dot"></span>'; document.body.appendChild(ct);
+      const cp = document.createElement('div'); cp.className = 'chat-panel'; cp.id = 'chatPanel'; document.body.appendChild(cp);
+      var self = this;
+      document.getElementById('chatToggle').addEventListener('click', function(e) { e.stopPropagation(); var p=document.getElementById('chatPanel'); p.classList.toggle('show'); if(p.classList.contains('show')) self.renderChat(); });
+      document.addEventListener('click', function(e) { if(!e.target.closest('#chatPanel')&&!e.target.closest('#chatToggle')) document.getElementById('chatPanel').classList.remove('show'); });
+      this.bindEvents();
+      this.handleRoute();
+      window.addEventListener('hashchange', function() { self.handleRoute(); });
+    } catch(e) {
+      var el=document.createElement('div'); el.style.cssText='position:fixed;top:0;left:0;right:0;padding:16px;background:#ff5e7a;color:#fff;z-index:9999;font-family:sans-serif;';
+      el.textContent='Error: '+(e.message||'Unknown');
+      document.body.prepend(el);
+    }
+  },
+
+  bindEvents() {
+    var self = this;
+    document.querySelectorAll('.nav-item').forEach(function(el) { el.addEventListener('click', function() { window.location.hash = el.dataset.route; }); });
+    var sel = document.getElementById('roleSelector'), dd = document.getElementById('roleDropdown');
+    if(sel) {
+      sel.addEventListener('click', function(e) { e.stopPropagation(); dd.classList.toggle('show'); });
+      document.addEventListener('click', function() { dd.classList.remove('show'); });
+      document.querySelectorAll('.role-option').forEach(function(el) { el.addEventListener('click', function(e) { e.stopPropagation(); self.setRole(el.dataset.role); dd.classList.remove('show'); }); });
+    }
+  },
+
+  handleRoute() {
+    var route = window.location.hash.slice(1) || 'dashboard';
+    this.currentRoute = route;
+    document.querySelectorAll('.nav-item').forEach(function(el) { el.classList.toggle('active', el.dataset.route === route); });
+    var map = { dashboard:'dashboard', qc:'qc', coal:'coal', maintenance:'maintenance', 'knowledge-graph':'knowledge-graph' };
+    AppState.chatScenario = map[route] || 'dashboard';
+    this.renderPage(route);
+  },
+
+  setRole(roleId) {
+    this.currentRole = roleId;
+    var u = DATA.USERS[roleId];
+    document.getElementById('roleName').textContent = u.name+'（'+u.title+'）';
+    document.getElementById('roleDot').style.background = u.avatar;
+    var labels = { factory_leader:'战略层', dept_head:'管理层', engineer:'执行层', it_staff:'支撑层' };
+    document.getElementById('roleViewBadge').textContent = labels[roleId];
+    document.querySelectorAll('.role-option').forEach(function(el) { el.classList.toggle('active', el.dataset.role === roleId); });
+    this.renderPage(this.currentRoute);
+  },
+
+  renderPage(route) {
+    var content = document.getElementById('mainContent');
+    var titles = { dashboard:'总览看板', qc:'QC 质量攻关智能体', coal:'热电经济配煤智能体', maintenance:'开停车/检修方案辅助智能体', 'knowledge-graph':'知识图谱' };
+    document.getElementById('breadcrumb').textContent = titles[route]||'总览看板';
+    Object.values(this.charts).forEach(function(c) { try { c.destroy(); } catch(e) {} }); this.charts = {};
+    if(this.kgSimulation) { this.kgSimulation.stop(); this.kgSimulation = null; }
+    var r = { dashboard:function(c){App.renderDashboard(c);}, qc:function(c){App.renderQC(c);}, coal:function(c){App.renderCoal(c);}, maintenance:function(c){App.renderMaintenance(c);}, 'knowledge-graph':function(c){App.renderKnowledgeGraph(c);} };
+    (r[route]||r.dashboard)(content);
+  },
+
+  renderDashboard(container) {
+    var dd = ROLE_VIEWS[this.currentRole].dashboard;
+    container.innerHTML = '<div class="page-content"><div class="user-view-tagline" style="border-left-color:'+ROLE_VIEWS[this.currentRole].accent+'">'+ROLE_VIEWS[this.currentRole].tagline+'</div>'+
+      '<div class="kpi-row">'+dd.kpis.map(function(k) {
+        return '<div class="kpi-card '+k.color+'"><div class="kpi-label">'+k.label+'</div><div class="kpi-value '+k.color+'">'+k.value+'</div><div class="kpi-sub">'+k.sub+'</div><div class="kpi-trend up">'+k.trend+'</div></div>';
+      }).join('')+'</div>'+
+      '<div class="scenario-grid">'+
+      [{s:'qc',t:'QC 质量攻关智能体',d:'基于质量知识结构，辅助质量分析、要因定位和QC报告生成',c:'var(--cyan)'},
+       {s:'coal',t:'热电经济配煤智能体',d:'综合煤质、价格、库存、锅炉和环保约束，生成配煤方案',c:'var(--green)'},
+       {s:'maintenance',t:'检修方案辅助智能体',d:'基于历史方案和规程，辅助生成检修方案和风险清单',c:'var(--orange)'}
+      ].map(function(c,i){
+        return '<div class="scenario-card" data-route="'+c.s+'" onclick="window.location.hash=this.dataset.route"><div class="sc-num">0'+(i+1)+'</div><div class="sc-title" style="color:'+c.c+'">'+c.t+'</div><div class="sc-desc">'+c.d+'</div></div>';
+      }).join('')+'</div>'+
+      '<div class="content-grid-2"><div class="panel"><div class="panel-title">综合质量趋势</div><div class="chart-box"><canvas id="dashQcChart"></canvas></div></div><div class="panel"><div class="panel-title">配煤成本趋势</div><div class="chart-box"><canvas id="dashCoalChart"></canvas></div></div></div>'+
+      '<div class="content-grid-2"><div class="panel"><div class="panel-title">近期动态</div>'+
+      [{c:'red',t:'PVA 17-88粘度异常攻关中'},{c:'green',t:'AI配煤方案年节约128万'},{c:'orange',t:'K-101临修方案已编'},{c:'cyan',t:'VAE 705 QC课题完成'}].map(function(a){
+        return '<div class="activity-item"><span class="activity-dot '+a.c+'"></span><span class="activity-text">'+a.t+'</span></div>';
+      }).join('')+'</div><div class="panel"><div class="panel-title">系统概览<span class="saved-badge">已保存报告 <span class="sb-num">'+AppState.savedReports+'</span></span></div>'+
+      '<div style="font-size:12px;color:var(--text-secondary);">当前共维护3个场景知识库（43实体/51关系）</div></div></div></div>';
+    var self = this; setTimeout(function() { self.initDashCharts(); }, 50);
+  },
+
+  renderQC(container) {
+    var self = this; var qc = DATA.QC;
+    container.innerHTML = '<div class="page-content">'+
+      '<div class="content-grid-3"><div class="panel"><div class="panel-title">质量指标</div><table class="data-table"><tr><th>产品</th><th>当前</th><th>目标</th><th>状态</th></tr>'+
+      qc.indicators.map(function(i){var ok=parseFloat(i.current)<=26||i.id==='I005';return '<tr><td class="td-highlight">'+i.name+'</td><td>'+i.current+'</td><td>'+i.target+'</td><td><span class="status-dot '+(ok?'green':'red')+'"></span>'+(ok?'正常':'关注')+'</td></tr>';}).join('')+
+      '</table><div class="action-bar"><button class="interact-btn primary sm" onclick="App.handleGenerateReport()">&#x1F4CB;生成报告</button><button class="interact-btn success sm" onclick="App.handleSaveReport()">&#x1F4BE;保存</button><span class="saved-badge">已保存<span class="sb-num">'+AppState.savedReports+'</span>份</span></div></div>'+
+      '<div class="panel"><div class="panel-title">质量异常</div>'+
+      qc.issues.map(function(i){return '<div class="activity-item"><span class="activity-dot '+(i.severity==='high'?'red':i.severity==='mid'?'orange':'blue')+'"></span><span class="activity-text"><strong>'+i.product+'</strong>: '+i.description+'</span></div>';}).join('')+
+      '</div><div class="panel"><div class="panel-title">QC课题</div>'+
+      qc.topics.map(function(t){return '<div style="margin-bottom:10px;"><div>'+t.title+'</div><div class="progress-bar"><div class="progress-fill '+(t.status==='已完成'?'green':'cyan')+'" style="width:'+t.progress+'%"></div></div><div class="text-xs text-muted">'+t.progress+'%</div></div>';}).join('')+
+      '</div></div><div class="content-grid-2"><div class="panel"><div class="panel-title">质量趋势</div><div class="chart-box"><canvas id="qcTrendChart"></canvas></div></div>'+
+      '<div class="panel"><div class="panel-title">要因分析</div>'+
+      qc.report_template.cause_analysis.map(function(c){return '<div class="cause-bar"><span class="bar-label">'+c.factor+'</span><div class="bar-track"><div class="bar-fill" style="width:'+(c.correlation*100)+'%;background:'+(c.conclusion==='要因'?'var(--red)':c.conclusion==='次要'?'var(--orange)':'var(--green)')+'"></div></div><span class="bar-conclusion '+(c.conclusion==='要因'?'yes':c.conclusion==='次要'?'partial':'no')+'">'+c.conclusion+'</span></div>';}).join('')+
+      '</div></div></div>';
+    setTimeout(function(){var ctx=document.getElementById('qcTrendChart');if(ctx)self.initQCTrendChart(ctx);},50);
+  },
+
+  handleGenerateReport() {
+    var r = DATA.QC.report_template;
+    App.showModal('QC攻关报告', '<p style="font-weight:600;color:var(--cyan);">'+r.title+'</p><p>'+r.background+'</p><p><strong>目标：</strong>'+r.target+'</p><ul>'+r.measures.map(function(m){return '<li>'+m+'</li>';}).join('')+'</ul>',
+      [{text:'&#x1F4BE;保存知识库', cls:'interact-btn success sm', action:'App.handleSaveReport();App.closeModal();'},{text:'关闭', cls:'interact-btn outline sm', action:'App.closeModal();'}]);
+  },
+
+  handleSaveReport() {
+    AppState.savedReports++;
+    document.querySelectorAll('.sb-num').forEach(function(el){el.textContent=AppState.savedReports;});
+    App.showToast('报告已保存到知识库', 'success');
+  },
+
+  renderCoal(container) {
+    var coal = DATA.COAL;
+    container.innerHTML = '<div class="page-content"><div class="content-grid-2"><div class="panel"><div class="panel-title">煤种库存与价格</div><table class="data-table"><tr><th>煤种</th><th>热值</th><th>价格</th><th>库存</th></tr>'+
+      coal.coal_types.map(function(c){return '<tr><td class="td-highlight">'+c.name+'</td><td>'+c.cal+'</td><td style="color:var(--orange);">'+c.price+'元/t</td><td>'+(c.stock/1000).toFixed(1)+'万吨</td></tr>';}).join('')+
+      '</table></div><div class="panel"><div class="panel-title">配煤方案</div><div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">'+
+      coal.schemes.map(function(s){return '<div style="cursor:pointer;padding:10px;border:1px solid var(--border);border-radius:8px;'+(s.is_current?'border-color:var(--blue);':s.name.includes('推荐')?'border-color:var(--green);':'')+'" onclick="App.handleSchemeClick(\''+s.id+'\')"><div style="font-weight:600;font-size:13px;">'+s.name+'</div><div class="text-xs text-muted">热值'+s.result.cal_total+' 成本<strong style="color:var(--orange);">'+s.result.cost_per_ton+'元/t</strong></div></div>';}).join('')+
+      '</div></div></div><div class="panel"><div class="panel-title">成本趋势</div><div class="chart-box"><canvas id="coalCostChart"></canvas></div></div></div>';
+    var self=this; setTimeout(function(){var ctx=document.getElementById('coalCostChart');if(ctx){self.charts.coalCost=new Chart(ctx,{type:'line',data:{labels:coal.cost_trend.labels,datasets:[{label:'实际成本',data:coal.cost_trend.actual_cost,borderColor:'#22d7ef',fill:true,tension:0.3},{label:'目标成本',data:coal.cost_trend.target_cost,borderColor:'#ffb04a',borderDash:[5,5],tension:0.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9bb8d0',font:{size:10}}}},scales:{y:{min:600,max:800}}}});}},50);
+  },
+
+  handleSchemeClick(sid) {
+    var s=DATA.COAL.schemes.find(function(x){return x.id===sid;}); if(!s)return;
+    App.showModal(s.name, '<p>'+s.desc+'</p><ul>'+s.blend.map(function(b){return '<li>'+b.coal+': '+b.ratio+'%</li>';}).join('')+'</ul><p><strong>成本：</strong>'+s.result.cost_per_ton+'元/t <strong>热值：</strong>'+s.result.cal_total+'</p>',
+      [{text:'&#x2705;采用此方案', cls:'interact-btn success sm', action:'App.closeModal();AppState.appliedSchemes.push("Y");App.showToast("方案已标记待评估","success");'},{text:'关闭', cls:'interact-btn outline sm', action:'App.closeModal();'}]);
+  },
+
+  renderMaintenance(container) {
+    var mt = DATA.MAINTENANCE;
+    container.innerHTML = '<div class="page-content"><div class="content-grid-2"><div class="panel"><div class="panel-title">待办任务<span class="panel-badge high">'+mt.tasks.filter(function(t){return t.priority==='urgent';}).length+'紧急</span></div>'+
+      mt.tasks.map(function(t){return '<div class="activity-item"><span class="activity-dot '+(t.priority==='urgent'?'red':'orange')+'"></span><span class="activity-text"><strong>'+t.unit+'</strong>: '+t.desc+'</span></div>';}).join('')+
+      '</div><div class="panel"><div class="panel-title">AI方案草案</div><p style="font-size:13px;color:var(--text-primary);font-weight:600;">'+mt.plan_draft.title+'</p><p class="text-sm">工期'+mt.plan_draft.estimated_duration+' | 原因：'+mt.plan_draft.reason+'</p><button class="interact-btn success sm" onclick="AppState.submittedPlans.push(\'MT001\');App.showToast(\'方案已提交审批\',\'success\');">&#x1F4E4;提交审批</button></div></div></div>';
+  },
+
+  renderKnowledgeGraph(container) {
+    var self = this;
+    container.innerHTML = '<div class="page-content"><div class="panel" style="margin-bottom:14px;"><div class="panel-title">场景选择</div><div class="kg-toolbar">'+
+      [{k:'qc',l:'QC质量'},{k:'coal',l:'热电配煤'},{k:'maintenance',l:'检修方案'}].map(function(t,i){return '<button class="kg-btn'+(i===0?' active':'')+'" data-kg="'+t.k+'">'+t.l+'</button>';}).join('')+
+      '</div></div><div class="kg-container" id="kgContainer"><svg width="100%" height="100%" id="kgSvg"></svg><div class="kg-info" id="kgInfo"></div><div class="kg-node-tooltip" id="kgTooltip"></div></div></div>';
+    document.querySelectorAll('.kg-btn').forEach(function(b){b.addEventListener('click',function(){document.querySelectorAll('.kg-btn').forEach(function(x){x.classList.remove('active');});b.classList.add('active');self.renderKG(b.dataset.k);});});
+    setTimeout(function(){self.renderKG('qc');},50);
+  },
+
+  renderKG(type) {
+    var data = DATA.KNOWLEDGE_GRAPH[type]; if(!data) return;
+    document.getElementById('kgInfo').innerHTML = data.name+' | '+data.nodes.length+'实体 '+data.edges.length+'关系 | 滚轮缩放·拖拽平移';
+    var svg = document.getElementById('kgSvg'); if(!svg) return; svg.innerHTML = '';
+    var w = svg.parentElement.clientWidth||700, h = svg.parentElement.clientHeight||500;
+    var cm = { product:'#3884ff',indicator:'#42dfa0',equipment:'#ffb04a',material:'#a78bfa',team:'#22d7ef',batch:'#ff5e7a',coal:'#42dfa0',property:'#ffb04a',facility:'#a78bfa',unit:'#3884ff',procedure:'#42dfa0',risk:'#ff5e7a',ticket:'#ffb04a',measure:'#22d7ef' };
+    var sim = d3.forceSimulation(data.nodes).force('link',d3.forceLink(data.edges).id(function(d){return d.id;}).distance(80)).force('charge',d3.forceManyBody().strength(-200)).force('center',d3.forceCenter(w/2,h/2)).force('collision',d3.forceCollide(30));
+    this.kgSimulation = sim;
+    var svgEl = d3.select(svg);
+    var zoom = d3.zoom().scaleExtent([0.25,5]).on('zoom',function(event){mg.attr('transform',event.transform);});
+    svgEl.call(zoom);
+    var mg = svgEl.append('g');
+    var link = mg.append('g').selectAll('line').data(data.edges).join('line').attr('stroke','rgba(56,132,255,0.2)').attr('stroke-width',1.2);
+    var ll = mg.append('g').selectAll('text').data(data.edges).join('text').attr('font-size','9px').attr('fill','rgba(155,184,208,0.5)').attr('text-anchor','middle').text(function(d){return d.label;});
+    var node = mg.append('g').selectAll('g').data(data.nodes).join('g').call(d3.drag().on('start',function(e,d){if(!e.active)sim.alphaTarget(0.3).restart();d.fx=d.x;d.fy=d.y;svgEl.on('.zoom',null);}).on('drag',function(e,d){d.fx=e.x;d.fy=e.y;}).on('end',function(e,d){if(!e.active)sim.alphaTarget(0);d.fx=null;d.fy=null;svgEl.call(zoom);}));
+    node.append('circle').attr('r',7).attr('fill',function(d){return cm[d.type]||'#666';}).attr('stroke','rgba(255,255,255,0.15)').style('cursor','pointer');
+    node.append('text').text(function(d){return d.label;}).attr('font-size','10px').attr('fill','#e8f1f8').attr('dx',10).attr('dy',3);
+    var tt = document.getElementById('kgTooltip');
+    node.on('mouseenter',function(e,d){tt.style.display='block';tt.innerHTML='<div style="font-weight:600;">'+d.label+'</div><div style="color:var(--text-muted);font-size:11px;">'+(d.type||'')+'</div>';});
+    node.on('mousemove',function(e){tt.style.left=(e.offsetX+12)+'px';tt.style.top=(e.offsetY-10)+'px';});
+    node.on('mouseleave',function(){tt.style.display='none';});
+    sim.on('tick',function(){link.attr('x1',function(d){return d.source.x;}).attr('y1',function(d){return d.source.y;}).attr('x2',function(d){return d.target.x;}).attr('y2',function(d){return d.target.y;});ll.attr('x',function(d){return(d.source.x+d.target.x)/2;}).attr('y',function(d){return(d.source.y+d.target.y)/2;});node.attr('transform',function(d){return 'translate('+d.x+','+d.y+')';});});
+  },
+
+  renderChat() {
+    var panel = document.getElementById('chatPanel'), scenario = AppState.chatScenario;
+    var names = { dashboard:'全场景总览', qc:'QC质量攻关', coal:'热电配煤', maintenance:'检修方案', 'knowledge-graph':'知识图谱' };
+    var colors = { dashboard:'var(--blue)', qc:'var(--cyan)', coal:'var(--green)', maintenance:'var(--orange)', 'knowledge-graph':'var(--purple)' };
+    var history = AppState.chatHistory[scenario]||[], presets = CHAT_QA[scenario]||[];
+    var html = '<div class="chat-header"><div class="ch-title"><span style="color:'+(colors[scenario]||'var(--cyan)')+'">&#x1F916;</span>'+(names[scenario]||'AI助理')+'</div><span class="ch-close" onclick="document.getElementById(\'chatPanel\').classList.remove(\'show\')">&times;</span></div><div class="chat-messages" id="chatMessages">';
+    if(history.length===0) html += '<div class="chat-msg bot"><span class="cm-avatar">&#x1F916;</span><div class="cm-bubble">您好！我是'+(names[scenario]||'AI')+'智能助理，点击下方常见问题或直接输入。</div></div>';
+    else history.forEach(function(m){html+='<div class="chat-msg '+(m.role==='user'?'user':'bot')+'"><span class="cm-avatar">'+(m.role==='user'?'&#x1F464;':'&#x1F916;')+'</span><div class="cm-bubble">'+m.text+'</div></div>';});
+    html+='</div><div class="chat-presets">'+presets.slice(0,5).map(function(p){return '<span class="chat-preset-btn" onclick="App.handleChatPreset(\''+p.q.replace(/'/g,"\\'")+'\')">'+(p.q.length>16?p.q.slice(0,16)+'...':p.q)+'</span>';}).join('')+'</div>';
+    html+='<div class="chat-input-row"><input type="text" id="chatInput" placeholder="输入问题..."/><button class="ci-send" onclick="App.handleChatSend()">发送</button></div>';
+    panel.innerHTML = html;
+    var msgs = document.getElementById('chatMessages'); if(msgs) msgs.scrollTop = msgs.scrollHeight;
+  },
+
+  handleChatPreset(q) {
+    App.addChatMessage(AppState.chatScenario, q, true);
+    var resp = App.getChatResponse(AppState.chatScenario, q);
+    setTimeout(function(){App.addChatMessage(AppState.chatScenario, resp, false);},300);
+  },
+
+  handleChatSend() {
+    var inp = document.getElementById('chatInput'); if(!inp||!inp.value.trim()) return;
+    var q = inp.value.trim(); inp.value = '';
+    App.addChatMessage(AppState.chatScenario, q, true);
+    setTimeout(function(){App.addChatMessage(AppState.chatScenario, App.getChatResponse(AppState.chatScenario, q), false);},400);
+  },
+
+  addChatMessage(scenario, text, isUser) {
+    if(!AppState.chatHistory[scenario]) AppState.chatHistory[scenario] = [];
+    AppState.chatHistory[scenario].push({role:isUser?'user':'bot',text:text});
+    App.renderChat();
+    document.getElementById('chatPanel').classList.add('show');
+  },
+
+  getChatResponse(scenario, question) {
+    var qa = CHAT_QA[scenario]; if(!qa) return '抱歉，我暂时无法回答。请尝试常见问题。';
+    var best = null, bestScore = 0;
+    qa.forEach(function(item) {
+      var score = 0;
+      if(item.q.indexOf(question) >= 0 || question.indexOf(item.q) >= 0) score += 10;
+      var kws = question.split(/[\s,，？?]/).filter(function(s){return s.length>1;});
+      kws.forEach(function(kw){if(item.q.indexOf(kw)>=0)score+=3;});
+      if(score > bestScore) { bestScore = score; best = item; }
+    });
+    if(best && bestScore > 5) return best.a;
+    return '关于您的问题，建议查看页面数据看板或从常见问题中选择。';
+  },
+
+  initDashCharts() {
+    var qcCtx=document.getElementById('dashQcChart'), coalCtx=document.getElementById('dashCoalChart');
+    if(!qcCtx||!coalCtx) return;
+    this.charts.dashQc=new Chart(qcCtx,{type:'line',data:{labels:DATA.QC.trends.labels,datasets:[{label:'合格率%',data:DATA.QC.trends.qualified_rate,borderColor:'#42dfa0',fill:true,tension:0.3},{label:'粘度mPa·s',data:DATA.QC.trends.viscosity,borderColor:'#3884ff',fill:true,tension:0.3,yAxisID:'y1'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9bb8d0',font:{size:10}}}},scales:{y:{min:90,max:100},y1:{position:'right',grid:{display:false},min:20,max:30}}}});
+    this.charts.dashCoal=new Chart(coalCtx,{type:'line',data:{labels:DATA.COAL.cost_trend.labels,datasets:[{label:'实际成本',data:DATA.COAL.cost_trend.actual_cost,borderColor:'#22d7ef',fill:true,tension:0.3},{label:'目标成本',data:DATA.COAL.cost_trend.target_cost,borderColor:'#ffb04a',borderDash:[5,5],tension:0.3}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9bb8d0',font:{size:10}}}},scales:{y:{min:700,max:800}}}});
+  },
+
+  initQCTrendChart(ctx) {
+    this.charts.qcTrend=new Chart(ctx,{type:'line',data:{labels:DATA.QC.trends.labels,datasets:[{label:'粘度mPa·s',data:DATA.QC.trends.viscosity,borderColor:'#3884ff',fill:true,tension:0.3},{label:'合格率%',data:DATA.QC.trends.qualified_rate,borderColor:'#42dfa0',tension:0.3,yAxisID:'y1'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#9bb8d0',font:{size:10}}}},scales:{y1:{position:'right',grid:{display:false},min:90,max:100}}}});
+  },
+
+  showToast(message, type) {
+    var c=document.getElementById('toastContainer');
+    var icons={success:'&#x2705;',info:'&#x2139;&#xFE0F;',warning:'&#x26A0;&#xFE0F;'};
+    var t=document.createElement('div'); t.className='toast '+(type||'info');
+    t.innerHTML='<span class="t-icon">'+(icons[type]||icons.info)+'</span><span class="t-text">'+message+'</span>';
+    c.appendChild(t);
+    setTimeout(function(){t.style.opacity='0';t.style.transition='opacity 0.3s';setTimeout(function(){t.remove();},300);},3000);
+  },
+
+  showModal(title, body, buttons) {
+    document.getElementById('modalTitle').textContent=title;
+    document.getElementById('modalBody').innerHTML=body;
+    var btns=buttons||[{text:'关闭',cls:'interact-btn outline sm',action:'App.closeModal();'}];
+    document.getElementById('modalFooter').innerHTML=btns.map(function(b){return '<button class="'+b.cls+'" onclick="'+b.action+'">'+b.text+'</button>';}).join('');
+    document.getElementById('modalOverlay').classList.add('show');
+  },
+
+  closeModal() { document.getElementById('modalOverlay').classList.remove('show'); }
+};
+
+document.addEventListener('DOMContentLoaded', function() { App.init(); });
