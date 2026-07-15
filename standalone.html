@@ -1151,9 +1151,22 @@ html, body {
   <!-- Sidebar -->
   <nav class="sidebar">
     <div class="sidebar-brand">
-      <div class="logo-dot"></div>
+      <svg width="32" height="32" viewBox="0 0 100 100" style="flex-shrink:0;">
+        <defs>
+          <linearGradient id="sinopecGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#e60012" />
+            <stop offset="48%" style="stop-color:#e60012" />
+            <stop offset="52%" style="stop-color:#005bac" />
+            <stop offset="100%" style="stop-color:#005bac" />
+          </linearGradient>
+        </defs>
+        <circle cx="50" cy="50" r="46" fill="url(#sinopecGrad)" />
+        <path d="M28 38 Q45 22 62 36 Q78 50 60 58 Q45 64 38 55 Q28 44 40 70" 
+              fill="none" stroke="white" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round"/>
+        <circle cx="50" cy="50" r="46" fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="1"/>
+      </svg>
       <div>
-        <div class="brand-text">LINK AIP</div>
+        <div class="brand-text" style="font-size:13px;">中国石化</div>
         <div class="brand-sub">川维化工 · AI 智能体</div>
       </div>
     </div>
