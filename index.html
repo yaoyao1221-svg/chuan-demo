@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>川维化工 AI 智能体演示平台</title>
+<script src="js/chart.min.js"></script>
+<script src="js/d3.min.js"></script>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="app-layout" id="app">
+
+  <!-- Sidebar -->
+  <nav class="sidebar">
+    <div class="sidebar-brand">
+      <div class="logo-dot"></div>
+      <div>
+        <div class="brand-text">LINK AIP</div>
+        <div class="brand-sub">川维化工 · AI 智能体</div>
+      </div>
+    </div>
+    <div class="sidebar-nav" id="sidebarNav">
+      <div class="nav-item active" data-route="dashboard">
+        <span class="nav-icon">&#9632;</span>
+        总览看板
+      </div>
+      <div class="nav-item" data-route="qc">
+        <span class="nav-icon">&#9673;</span>
+        QC 质量攻关
+      </div>
+      <div class="nav-item" data-route="coal">
+        <span class="nav-icon">&#9671;</span>
+        热电经济配煤
+      </div>
+      <div class="nav-item" data-route="maintenance">
+        <span class="nav-icon">&#9641;</span>
+        检修方案辅助
+      </div>
+      <div class="nav-item" data-route="knowledge-graph">
+        <span class="nav-icon">&#9678;</span>
+        知识图谱
+      </div>
+    </div>
+    <div class="sidebar-footer">
+      <div class="text-xs text-muted">二次交流演示版</div>
+      <div class="text-xs text-muted" style="margin-top:2px">2026-07</div>
+    </div>
+  </nav>
+
+  <!-- Main Area -->
+  <div class="main-area">
+    <header class="topbar">
+      <div class="topbar-left">
+        <span class="topbar-breadcrumb" id="breadcrumb">总览看板</span>
+      </div>
+      <div class="topbar-right">
+        <span class="role-view-badge" id="roleViewBadge">战略层</span>
+        <div class="role-selector" id="roleSelector" style="position:relative;">
+          <span class="role-dot" id="roleDot" style="background:#1a73e8"></span>
+          <span id="roleName">张建国（厂领导）</span>
+          <span style="font-size:10px;margin-left:4px;">&#9660;</span>
+          <div class="role-dropdown" id="roleDropdown">
+            <div class="role-option active" data-role="factory_leader">
+              <span class="role-dot" style="background:#1a73e8"></span>
+              张建国 · 厂领导
+            </div>
+            <div class="role-option" data-role="dept_head">
+              <span class="role-dot" style="background:#0d7377"></span>
+              李明辉 · 部门负责人
+            </div>
+            <div class="role-option" data-role="engineer">
+              <span class="role-dot" style="background:#e67e22"></span>
+              王海涛 · 工艺工程师
+            </div>
+            <div class="role-option" data-role="it_staff">
+              <span class="role-dot" style="background:#8e44ad"></span>
+              陈志远 · 信息科
+            </div>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="content" id="mainContent">
+      <!-- Content rendered by app.js -->
+    </main>
+  </div>
+</div>
+
+<script src="js/data.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>
